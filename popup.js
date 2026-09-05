@@ -161,17 +161,28 @@ async function generateTOTP(secretBase32, period = 30, digits = 6) {
   }
 }
 
+// Screen Management Helper (Guarantees only 1 screen is visible)
+function showScreen(screenId) {
+  const screens = ['screenOnboarding', 'screenUnlock', 'screenDashboard'];
+  screens.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (id === screenId) ? 'block' : 'none';
+  });
+
+  const isUnlocked = (screenId === 'screenDashboard');
+  const btnLock = document.getElementById('btnLockVault');
+  const btnAdd = document.getElementById('btnOpenAdd');
+  if (btnLock) btnLock.style.display = isUnlocked ? 'flex' : 'none';
+  if (btnAdd) btnAdd.style.display = isUnlocked ? 'flex' : 'none';
+}
+
 // App LifeCycle
 async function initApp() {
   const encVault = await storage.get(VAULT_STORAGE_KEY);
   if (!encVault) {
-    document.getElementById('screenOnboarding').style.display = 'block';
-    document.getElementById('screenUnlock').style.display = 'none';
-    document.getElementById('screenDashboard').style.display = 'none';
+    showScreen('screenOnboarding');
   } else {
-    document.getElementById('screenOnboarding').style.display = 'none';
-    document.getElementById('screenUnlock').style.display = 'block';
-    document.getElementById('screenDashboard').style.display = 'none';
+    showScreen('screenUnlock');
   }
 }
 
@@ -238,8 +249,7 @@ async function verifyUnlockPin() {
 
   unlockPin = "";
   updateUnlockDots();
-  document.getElementById('screenUnlock').style.display = 'none';
-  document.getElementById('screenDashboard').style.display = 'block';
+  showScreen('screenDashboard');
   renderAccounts();
   startTOTPLoop();
 }
@@ -249,8 +259,7 @@ function lockVault() {
   vault = [];
   unlockPin = "";
   updateUnlockDots();
-  document.getElementById('screenDashboard').style.display = 'none';
-  document.getElementById('screenUnlock').style.display = 'block';
+  showScreen('screenUnlock');
 }
 
 async function saveVault() {
@@ -397,8 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await storage.set(EM_HASH_STORAGE_KEY, emHash);
     await saveVault();
 
-    document.getElementById('screenOnboarding').style.display = 'none';
-    document.getElementById('screenDashboard').style.display = 'block';
+    showScreen('screenDashboard');
     showToast('Cofre inicializado!');
     renderAccounts();
     startTOTPLoop();
@@ -448,8 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await saveVault();
 
     document.getElementById('modalRecovery').classList.remove('active');
-    document.getElementById('screenUnlock').style.display = 'none';
-    document.getElementById('screenDashboard').style.display = 'block';
+    showScreen('screenDashboard');
     showToast('PIN redefinido com sucesso!');
     renderAccounts();
     startTOTPLoop();
