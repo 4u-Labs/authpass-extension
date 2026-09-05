@@ -632,6 +632,147 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('inputSecret').value = '';
   });
 
+  function bytesToBase32(bytes) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = 0;
+    let value = 0;
+    let output = '';
+    for (let i = 0; i < bytes.length; i++) {
+      value = (value << 8) | bytes[i];
+      bits += 8;
+      while (bits >= 5) {
+        output += alphabet[(value >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
+    }
+    if (bits > 0) {
+      output += alphabet[(value << (5 - bits)) & 31];
+    }
+    return output;
+  }
+
+  function decodeGoogleMigrationUri(uri) {
+    try {
+      const url = new URL(uri);
+      if (!uri.startsWith('otpauth-migration:')) return null;
+      const dataParam = url.searchParams.get('data');
+      if (!dataParam) return null;
+
+      let base64 = decodeURIComponent(dataParam).replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4) {
+        base64 += '=';
+      }
+      const binaryStr = atob(base64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      let pos = 0;
+      function readVarint() {
+        let res = 0;
+        let shift = 0;
+        while (pos < bytes.length) {
+          const b = bytes[pos++];
+          res |= (b & 0x7f) << shift;
+          if ((b & 0x80) === 0) break;
+          shift += 7;
+          if (shift > 35) break;
+        }
+        return res;
+      }
+
+      const accounts = [];
+
+      while (pos < bytes.length) {
+        const tag = readVarint();
+        const fieldNumber = tag >>> 3;
+        const wireType = tag & 0x07;
+
+        if (wireType === 2) {
+          const len = readVarint();
+          const endPos = Math.min(pos + len, bytes.length);
+          if (fieldNumber === 1) { // otp_parameters
+            let secret = null;
+            let name = '';
+            let issuer = '';
+            let digits = 6;
+            let algorithm = 'SHA-1';
+
+            while (pos < endPos) {
+              const innerTag = readVarint();
+              const innerFieldNumber = innerTag >>> 3;
+              const innerWireType = innerTag & 0x07;
+
+              if (innerWireType === 2) {
+                const innerLen = readVarint();
+                const subBytes = bytes.slice(pos, pos + innerLen);
+                pos += innerLen;
+                if (innerFieldNumber === 1) {
+                  secret = bytesToBase32(subBytes);
+                } else if (innerFieldNumber === 2) {
+                  name = new TextDecoder().decode(subBytes);
+                } else if (innerFieldNumber === 3) {
+                  issuer = new TextDecoder().decode(subBytes);
+                }
+              } else if (innerWireType === 0) {
+                const val = readVarint();
+                if (innerFieldNumber === 4) {
+                  if (val === 2) algorithm = 'SHA-256';
+                  else if (val === 3) algorithm = 'SHA-512';
+                  else algorithm = 'SHA-1';
+                } else if (innerFieldNumber === 5) {
+                  if (val === 2) digits = 8;
+                  else digits = 6;
+                }
+              } else if (innerWireType === 1) {
+                pos += 8;
+              } else if (innerWireType === 5) {
+                pos += 4;
+              } else {
+                pos = endPos;
+                break;
+              }
+            }
+
+            if (secret) {
+              let label = name;
+              if (name.includes(':')) {
+                const parts = name.split(':');
+                if (!issuer) issuer = parts[0].trim();
+                label = parts.slice(1).join(':').trim();
+              }
+              accounts.push({
+                id: Date.now() + Math.floor(Math.random() * 100000),
+                issuer: issuer || '2FA',
+                label: label || name || 'Conta',
+                secret: secret,
+                digits: digits,
+                period: 30,
+                algorithm: algorithm
+              });
+            }
+          } else {
+            pos = endPos;
+          }
+        } else if (wireType === 0) {
+          readVarint();
+        } else if (wireType === 1) {
+          pos += 8;
+        } else if (wireType === 5) {
+          pos += 4;
+        } else {
+          break;
+        }
+      }
+
+      return accounts;
+    } catch (err) {
+      console.error('Erro ao decodificar migração Google Auth:', err);
+      return null;
+    }
+  }
+
   // File Upload QR Code Scanner
   document.getElementById('dropZoneQr').addEventListener('click', () => {
     document.getElementById('fileQrInput').click();
@@ -643,7 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         const canvas = document.getElementById('qrCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         canvas.width = img.width;
@@ -651,22 +792,60 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.drawImage(img, 0, 0);
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         if (typeof jsQR !== 'undefined') {
-          const code = jsQR(imgData.data, imgData.width, imgData.height);
-          if (code && code.data && code.data.startsWith('otpauth://totp/')) {
-            const url = new URL(code.data);
-            const labelPart = decodeURIComponent(url.pathname.replace('//totp/', ''));
-            let issuer = url.searchParams.get('issuer') || '';
-            let account = labelPart;
-            if (labelPart.includes(':')) {
-              const parts = labelPart.split(':');
-              if (!issuer) issuer = parts[0].trim();
-              account = parts[1].trim();
+          let code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+          if (!code && (img.width > 1200 || img.height > 1200)) {
+            const scale = 1000 / Math.max(img.width, img.height);
+            const sw = Math.floor(img.width * scale);
+            const sh = Math.floor(img.height * scale);
+            canvas.width = sw;
+            canvas.height = sh;
+            ctx.drawImage(img, 0, 0, sw, sh);
+            const scaledData = ctx.getImageData(0, 0, sw, sh);
+            code = jsQR(scaledData.data, scaledData.width, scaledData.height, { inversionAttempts: 'attemptBoth' });
+          }
+
+          if (code && code.data) {
+            if (code.data.startsWith('otpauth-migration://')) {
+              const imported = decodeGoogleMigrationUri(code.data);
+              if (imported && imported.length > 0) {
+                let addedCount = 0;
+                imported.forEach(acc => {
+                  const exists = vault.some(v => v.secret.replace(/\s+/g, '') === acc.secret.replace(/\s+/g, ''));
+                  if (!exists) {
+                    vault.push(acc);
+                    addedCount++;
+                  }
+                });
+                if (addedCount > 0) {
+                  await saveVault();
+                  document.getElementById('modalAdd').classList.remove('active');
+                  renderAccounts();
+                  showToast(`${addedCount} conta(s) importada(s) do Google Authenticator!`);
+                } else {
+                  document.getElementById('modalAdd').classList.remove('active');
+                  showToast('Todas as contas do Google Authenticator já existem no seu cofre.');
+                }
+              } else {
+                showToast('Nenhuma conta encontrada no QR de migração.');
+              }
+            } else if (code.data.startsWith('otpauth://totp/')) {
+              const url = new URL(code.data);
+              const labelPart = decodeURIComponent(url.pathname.replace('//totp/', ''));
+              let issuer = url.searchParams.get('issuer') || '';
+              let account = labelPart;
+              if (labelPart.includes(':')) {
+                const parts = labelPart.split(':');
+                if (!issuer) issuer = parts[0].trim();
+                account = parts[1].trim();
+              }
+              document.getElementById('inputIssuer').value = issuer || '2FA';
+              document.getElementById('inputLabel').value = account;
+              document.getElementById('inputSecret').value = url.searchParams.get('secret') || '';
+              document.getElementById('tabBtnManual').click();
+              showToast('QR Code lido! Clique em Salvar.');
+            } else {
+              showToast('QR Code não é um token 2FA compatível.');
             }
-            document.getElementById('inputIssuer').value = issuer || '2FA';
-            document.getElementById('inputLabel').value = account;
-            document.getElementById('inputSecret').value = url.searchParams.get('secret') || '';
-            document.getElementById('tabBtnManual').click();
-            showToast('QR Code lido! Clique em Salvar.');
           } else {
             showToast('Nenhum QR Code 2FA válido encontrado.');
           }
