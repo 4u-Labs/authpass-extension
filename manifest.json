@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "AuthPass — Autenticador 2FA Zero-Knowledge",
+  "version": "1.0.0",
+  "description": "Autenticador 2FA (TOTP) seguro com criptografia militar Zero-Knowledge no navegador, leitor de QR Code e retenção zero.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png",
+    "192": "icon-192.png"
+  },
+  "permissions": [
+    "storage"
+  ]
+}

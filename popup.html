@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>AuthPass</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="jsQR.min.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand-wrap">
+      <div class="brand-icon">🛡️</div>
+      <div class="brand-info">
+        <h1>AuthPass</h1>
+        <p>Zero-Knowledge • 2FA</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" id="btnLockVault" title="Bloquear Cofre">🔒</button>
+      <button class="btn-icon btn-primary" id="btnOpenAdd" title="Adicionar Conta">➕</button>
+    </div>
+  </header>
+
+  <!-- SCREEN 1: ONBOARDING (Criar PIN) -->
+  <div id="screenOnboarding" class="screen-card" style="display: none;">
+    <div class="screen-icon-wrap">🛡️</div>
+    <h2 class="screen-title">Bem-vindo ao AuthPass</h2>
+    <p class="screen-subtitle">Crie um <strong>PIN de 6 dígitos</strong> para proteger suas chaves no navegador:</p>
+    
+    <div class="pin-display" id="onboardPinDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+
+    <div class="keypad" id="onboardKeypad">
+      <button class="keypad-btn" data-val="1">1</button>
+      <button class="keypad-btn" data-val="2">2</button>
+      <button class="keypad-btn" data-val="3">3</button>
+      <button class="keypad-btn" data-val="4">4</button>
+      <button class="keypad-btn" data-val="5">5</button>
+      <button class="keypad-btn" data-val="6">6</button>
+      <button class="keypad-btn" data-val="7">7</button>
+      <button class="keypad-btn" data-val="8">8</button>
+      <button class="keypad-btn" data-val="9">9</button>
+      <button class="keypad-btn btn-action" id="btnOnboardClear">🗑️</button>
+      <button class="keypad-btn" data-val="0">0</button>
+      <button class="keypad-btn btn-action" id="btnOnboardBack">⌫</button>
+    </div>
+
+    <div id="stepEmergencyKey" style="display: none; margin-top: 16px; text-align: left;">
+      <h3 style="font-size: 0.9rem; font-weight: 700; color: #fff; margin-bottom: 6px;">⚠️ Salve sua Chave Mestra:</h3>
+      <div class="recovery-box" id="emergencyKeyDisplay">AUTHPASS-XXXX-XXXX</div>
+      <button class="btn-full btn-primary" id="btnCopyEmergencyKey" style="margin-bottom: 10px;">Copiar Chave</button>
+      <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #94a3b8; cursor: pointer;">
+        <input type="checkbox" id="chkSavedEmergencyKey">
+        Eu guardei a chave com segurança.
+      </label>
+      <button id="btnFinishOnboarding" disabled class="btn-full btn-primary" style="margin-top: 10px; opacity: 0.5;">
+        Acessar Meu Cofre ➔
+      </button>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: UNLOCK (Desbloquear PIN) -->
+  <div id="screenUnlock" class="screen-card" style="display: none;">
+    <div class="screen-icon-wrap">🔒</div>
+    <h2 class="screen-title">Cofre Protegido</h2>
+    <p class="screen-subtitle">Digite seu PIN de 6 dígitos:</p>
+
+    <div class="pin-display" id="unlockPinDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+
+    <div class="keypad" id="unlockKeypad">
+      <button class="keypad-btn" data-val="1">1</button>
+      <button class="keypad-btn" data-val="2">2</button>
+      <button class="keypad-btn" data-val="3">3</button>
+      <button class="keypad-btn" data-val="4">4</button>
+      <button class="keypad-btn" data-val="5">5</button>
+      <button class="keypad-btn" data-val="6">6</button>
+      <button class="keypad-btn" data-val="7">7</button>
+      <button class="keypad-btn" data-val="8">8</button>
+      <button class="keypad-btn" data-val="9">9</button>
+      <button class="keypad-btn btn-action" id="btnUnlockClear">🗑️</button>
+      <button class="keypad-btn" data-val="0">0</button>
+      <button class="keypad-btn btn-action" id="btnUnlockBack">⌫</button>
+    </div>
+
+    <button id="btnOpenRecovery" style="margin-top: 16px; background: transparent; border: none; color: #38bdf8; font-size: 0.75rem; text-decoration: underline; cursor: pointer;">
+      Esqueci meu PIN (Usar Chave de Emergência)
+    </button>
+  </div>
+
+  <!-- SCREEN 3: DASHBOARD (Lista de Contas) -->
+  <div id="screenDashboard" style="display: none;">
+    <div class="search-box">
+      <input type="text" id="filterInput" class="search-input" placeholder="Pesquisar contas...">
+    </div>
+
+    <div id="emptyAccounts" class="empty-state" style="display: none;">
+      <p style="font-size: 1.5rem; margin-bottom: 6px;">📱</p>
+      <p style="font-weight: 700; margin-bottom: 4px;">Nenhuma conta cadastrada</p>
+      <p style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 12px;">Clique em (+) para adicionar seu primeiro token 2FA.</p>
+      <button class="btn-full btn-primary" id="btnEmptyAdd">Adicionar Conta</button>
+    </div>
+
+    <div class="accounts-list" id="accountsList"></div>
+  </div>
+
+  <!-- MODAL: ADICIONAR CONTA -->
+  <div class="modal-backdrop" id="modalAdd">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title">Adicionar Conta 2FA</div>
+        <button class="modal-close" id="btnCloseAdd">✖</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button class="modal-tab-btn active" id="tabBtnManual">Manual</button>
+        <button class="modal-tab-btn" id="tabBtnUpload">Carregar Print QR</button>
+      </div>
+
+      <div id="tabContentUpload" style="display: none;">
+        <div class="drop-zone" id="dropZoneQr">
+          <p style="font-size: 1.5rem; margin-bottom: 6px;">📷</p>
+          <p>Clique ou arraste uma foto/screenshot do QR Code</p>
+          <input type="file" id="fileQrInput" accept="image/*" style="display: none;">
+        </div>
+        <canvas id="qrCanvas" style="display: none;"></canvas>
+      </div>
+
+      <div id="tabContentManual">
+        <form id="formManualAdd">
+          <div class="form-group">
+            <label class="form-label">Serviço (ex: GitHub, Google)</label>
+            <input type="text" id="inputIssuer" class="form-input" placeholder="Ex: GitHub" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Conta / E-mail</label>
+            <input type="text" id="inputLabel" class="form-input" placeholder="Ex: usuario@gmail.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chave Secreta (Base32)</label>
+            <input type="text" id="inputSecret" class="form-input" style="font-family: monospace; text-transform: uppercase;" placeholder="Ex: JBSWY3DPEHPK3PXP" required>
+          </div>
+          <button type="submit" class="btn-full btn-primary">Salvar Conta</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: RECUPERAÇÃO -->
+  <div class="modal-backdrop" id="modalRecovery">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title">Recuperar Cofre</div>
+        <button class="modal-close" id="btnCloseRecovery">✖</button>
+      </div>
+      <p style="font-size: 0.775rem; color: #94a3b8; margin-bottom: 12px;">
+        Insira sua Chave Mestra de Emergência para redefinir seu PIN:
+      </p>
+      <form id="formRecovery">
+        <div class="form-group">
+          <label class="form-label">Chave Mestra</label>
+          <input type="text" id="recoveryKeyInput" class="form-input" style="font-family: monospace;" placeholder="AUTHPASS-XXXX-XXXX" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Novo PIN (6 dígitos)</label>
+          <input type="password" maxlength="6" id="recoveryNewPin" class="form-input" placeholder="Ex: 123456" required>
+        </div>
+        <button type="submit" class="btn-full btn-primary">Redefinir e Desbloquear</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toastBox">Código copiado!</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
