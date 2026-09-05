@@ -128,7 +128,7 @@ function base32toHex(base32) {
   return hex;
 }
 
-async function generateTOTP(secretBase32, period = 30, digits = 6) {
+async function generateTOTP(secretBase32, period = 30, digits = 6, algorithm = "SHA-1") {
   try {
     const epoch = Math.floor(Date.now() / 1000.0);
     const timeStep = Math.floor(epoch / period);
@@ -141,8 +141,15 @@ async function generateTOTP(secretBase32, period = 30, digits = 6) {
     if (!secretHex || secretHex.length < 2) return "000000";
 
     const secretBytes = new Uint8Array(secretHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+    let hashName = "SHA-1";
+    const upper = (algorithm || "SHA-1").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (upper === "SHA256") hashName = "SHA-256";
+    else if (upper === "SHA512") hashName = "SHA-512";
+    else hashName = "SHA-1";
+
     const key = await crypto.subtle.importKey(
-      "raw", secretBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+      "raw", secretBytes, { name: "HMAC", hash: { name: hashName } }, false, ["sign"]
     );
     const signature = await crypto.subtle.sign("HMAC", key, timeBuffer);
     const hash = new Uint8Array(signature);
@@ -157,6 +164,7 @@ async function generateTOTP(secretBase32, period = 30, digits = 6) {
     const otp = binary % mod;
     return otp.toString().padStart(digits, '0');
   } catch (e) {
+    console.error("Erro ao gerar TOTP:", e);
     return "000000";
   }
 }
@@ -360,7 +368,7 @@ async function renderAccounts() {
 
   let html = '';
   for (const acc of filtered) {
-    const code = await generateTOTP(acc.secret);
+    const code = await generateTOTP(acc.secret, acc.period || 30, acc.digits || 6, acc.algorithm || 'SHA-1');
     const formattedCode = code.length === 6 ? `${code.slice(0,3)} ${code.slice(3)}` : code;
     html += `
       <div class="account-card" data-code="${code}" title="Clique para copiar">
@@ -436,7 +444,7 @@ async function updateTOTP() {
         codeEl.className = 'otp-code';
       }
       if (rem === period || rem === period - 1) {
-        const newCode = await generateTOTP(acc.secret);
+        const newCode = await generateTOTP(acc.secret, acc.period || 30, acc.digits || 6, acc.algorithm || 'SHA-1');
         codeEl.textContent = newCode.length === 6 ? `${newCode.slice(0,3)} ${newCode.slice(3)}` : newCode;
       }
     }
