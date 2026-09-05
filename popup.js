@@ -178,16 +178,51 @@ function showScreen(screenId) {
 
 // App LifeCycle
 async function initApp() {
-  const encVault = await storage.get(VAULT_STORAGE_KEY);
-  const skipGoogle = await storage.get('authpass_skip_google');
-  const googleToken = await storage.get('authpass_gdrive_token');
+  await triggerManualSync(true);
 
-  if (googleToken || encVault) {
+  const encVault = await storage.get(VAULT_STORAGE_KEY);
+  if (encVault) {
     showScreen('screenUnlock');
-  } else if (skipGoogle === 'true') {
-    showScreen('screenOnboarding');
   } else {
-    showScreen('screenGoogleAuth');
+    showScreen('screenOnboarding');
+  }
+}
+
+async function triggerManualSync(silent = false) {
+  if (!silent) showToast('Sincronizando com a Nuvem 4U...');
+  const activeEmail = (await storage.get('authpass_active_email')) || 'fbr4g4@gmail.com';
+  let token = await storage.get('authpass_cloud_token');
+
+  try {
+    const url = `https://4u.ia.br/app/authpass/index.php?action=pull&email=${encodeURIComponent(activeEmail)}` + (token ? `&token=${encodeURIComponent(token)}` : '');
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data && data.success) {
+      if (data.token && !token) {
+        token = data.token;
+        await storage.set('authpass_cloud_token', token);
+      }
+      if (data.vault_data) {
+        const vd = data.vault_data;
+        if (vd.vault_encrypted) await storage.set(VAULT_STORAGE_KEY, vd.vault_encrypted);
+        if (vd.salt) await storage.set(SALT_STORAGE_KEY, vd.salt);
+        if (vd.verifier) await storage.set(VERIFIER_STORAGE_KEY, vd.verifier);
+        if (vd.em_hash) await storage.set(EM_HASH_STORAGE_KEY, vd.em_hash);
+
+        if (currentKey && vd.vault_encrypted) {
+          const json = await decryptData(vd.vault_encrypted, currentKey);
+          vault = JSON.parse(json) || [];
+          renderAccounts();
+        } else {
+          showScreen('screenUnlock');
+        }
+
+        if (!silent) showToast(`Sincronizado da Nuvem 4U (${activeEmail})!`);
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('Sync pull error:', err);
   }
 }
 
@@ -257,6 +292,9 @@ async function verifyUnlockPin() {
   showScreen('screenDashboard');
   renderAccounts();
   startTOTPLoop();
+
+  // Puxa atualizações em background
+  triggerManualSync(true);
 }
 
 function lockVault() {
@@ -272,6 +310,34 @@ async function saveVault() {
   const json = JSON.stringify(vault);
   const cipher = await encryptData(json, currentKey);
   await storage.set(VAULT_STORAGE_KEY, cipher);
+
+  // Push para Nuvem 4U (SQLite Zero-Knowledge)
+  const salt = await storage.get(SALT_STORAGE_KEY);
+  const verifier = await storage.get(VERIFIER_STORAGE_KEY);
+  const emHash = await storage.get(EM_HASH_STORAGE_KEY);
+  const activeEmail = (await storage.get('authpass_active_email')) || 'fbr4g4@gmail.com';
+  const token = await storage.get('authpass_cloud_token');
+
+  const vaultPayload = {
+    version: "1.0",
+    app: "AuthPass 4U.IA.BR",
+    updated_at: new Date().toISOString(),
+    vault_encrypted: cipher,
+    salt: salt,
+    verifier: verifier,
+    em_hash: emHash
+  };
+
+  try {
+    const pushUrl = `https://4u.ia.br/app/authpass/index.php?action=push&email=${encodeURIComponent(activeEmail)}` + (token ? `&token=${encodeURIComponent(token)}` : '');
+    await fetch(pushUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vault_data: vaultPayload, email: activeEmail })
+    });
+  } catch (e) {
+    console.warn('Sync push error:', e);
+  }
 }
 
 // Render Accounts
@@ -454,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
     unlockPin = unlockPin.slice(0, -1);
     updateUnlockDots();
   });
+  document.getElementById('btnSyncCloud')?.addEventListener('click', () => triggerManualSync(false));
   document.getElementById('btnLockVault').addEventListener('click', lockVault);
 
   // Recovery
