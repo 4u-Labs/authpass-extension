@@ -18,28 +18,11 @@
     </div>
     <div class="header-actions">
       <button class="btn-icon" id="btnSyncCloud" title="Sincronizar com a Nuvem 4U">🔄</button>
+      <button class="btn-icon" id="btnOpenSettings" title="Configurações de Conta">⚙️</button>
       <button class="btn-icon" id="btnLockVault" title="Bloquear Cofre">🔒</button>
       <button class="btn-icon btn-primary" id="btnOpenAdd" title="Adicionar Conta">➕</button>
     </div>
   </header>
-
-  <!-- SCREEN 0: CONECTAR GOOGLE (Backup em Nuvem na pasta AuthPass) -->
-  <div id="screenGoogleAuth" class="screen-card" style="display: none;">
-    <div class="screen-icon-wrap" style="color: #34a853;">🌐</div>
-    <h2 class="screen-title">Sincronização & Backup</h2>
-    <p class="screen-subtitle">Conecte sua conta Google para salvar e sincronizar suas contas na pasta <strong>AuthPass</strong> do seu Google Drive.</p>
-
-    <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 10px 12px; margin-bottom: 16px; font-size: 0.75rem; color: #cbd5e1; line-height: 1.4; text-align: left;">
-      🔒 <strong>Zero-Knowledge:</strong> Chaves criptografadas com seu PIN. Nem o Google nem o servidor têm acesso.
-    </div>
-
-    <button class="btn-full btn-primary" id="btnGoogleConnectPopup" style="margin-bottom: 10px; background: #1f293d; border: 1px solid rgba(255,255,255,0.2);">
-      Conectar com o Google
-    </button>
-    <button id="btnSkipGooglePopup" style="background: transparent; border: none; color: #94a3b8; font-size: 0.725rem; text-decoration: underline; cursor: pointer;">
-      Continuar apenas neste navegador (Offline)
-    </button>
-  </div>
 
   <!-- SCREEN 1: ONBOARDING (Criar PIN) -->
   <div id="screenOnboarding" class="screen-card" style="display: none;">
@@ -190,6 +173,27 @@
           <input type="password" maxlength="6" id="recoveryNewPin" class="form-input" placeholder="Ex: 123456" required>
         </div>
         <button type="submit" class="btn-full btn-primary">Redefinir e Desbloquear</button>
+      </form>
+    </div>
+  <!-- MODAL: CONFIGURAÇÕES / CONTA -->
+  <div class="modal-backdrop" id="modalSettings">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title">Sincronização & Conta</div>
+        <button class="modal-close" id="btnCloseSettings">✖</button>
+      </div>
+      <p style="font-size: 0.775rem; color: #94a3b8; margin-bottom: 14px; line-height: 1.4;">
+        Seus dados são protegidos por criptografia <strong>Zero-Knowledge</strong>. O mesmo PIN cadastrado no WebApp desbloqueia a extensão.
+      </p>
+      <form id="formSettings">
+        <div class="form-group">
+          <label class="form-label">E-mail da Conta 4U / Google</label>
+          <input type="email" id="settingsEmailInput" class="form-input" placeholder="seuemail@gmail.com" required>
+        </div>
+        <button type="submit" class="btn-full btn-primary" style="margin-bottom: 10px;">Salvar e Sincronizar</button>
+        <button type="button" id="btnOpenWebApp" class="btn-full" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #cbd5e1; font-size: 0.8rem;">
+          Abrir AuthPass WebApp ↗
+        </button>
       </form>
     </div>
   </div>

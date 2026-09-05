@@ -163,7 +163,7 @@ async function generateTOTP(secretBase32, period = 30, digits = 6) {
 
 // Screen Management Helper (Guarantees only 1 screen is visible)
 function showScreen(screenId) {
-  const screens = ['screenGoogleAuth', 'screenOnboarding', 'screenUnlock', 'screenDashboard'];
+  const screens = ['screenOnboarding', 'screenUnlock', 'screenDashboard'];
   screens.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = (id === screenId) ? 'block' : 'none';
@@ -447,27 +447,46 @@ async function updateTOTP() {
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
 
-  // Google Connect & Skip
-  const btnGooglePopup = document.getElementById('btnGoogleConnectPopup');
-  if (btnGooglePopup) {
-    btnGooglePopup.addEventListener('click', () => {
+  // Settings & Account Modal
+  const btnOpenSettings = document.getElementById('btnOpenSettings');
+  const btnCloseSettings = document.getElementById('btnCloseSettings');
+  const modalSettings = document.getElementById('modalSettings');
+  const formSettings = document.getElementById('formSettings');
+  const settingsEmailInput = document.getElementById('settingsEmailInput');
+  const btnOpenWebApp = document.getElementById('btnOpenWebApp');
+
+  if (btnOpenSettings) {
+    btnOpenSettings.addEventListener('click', async () => {
+      const email = (await storage.get('authpass_active_email')) || 'fbr4g4@gmail.com';
+      if (settingsEmailInput) settingsEmailInput.value = email;
+      modalSettings?.classList.add('active');
+    });
+  }
+  if (btnCloseSettings) {
+    btnCloseSettings.addEventListener('click', () => {
+      modalSettings?.classList.remove('active');
+    });
+  }
+  if (formSettings) {
+    formSettings.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newEmail = (settingsEmailInput.value || '').trim().toLowerCase();
+      if (!newEmail || !newEmail.includes('@')) {
+        showToast('E-mail inválido.');
+        return;
+      }
+      await storage.set('authpass_active_email', newEmail);
+      modalSettings?.classList.remove('active');
+      showToast('Conta atualizada! Sincronizando...');
+      await triggerManualSync(false);
+    });
+  }
+  if (btnOpenWebApp) {
+    btnOpenWebApp.addEventListener('click', () => {
       if (typeof chrome !== 'undefined' && chrome.tabs) {
         chrome.tabs.create({ url: "https://4u.ia.br/app/authpass/" });
       } else {
         window.open("https://4u.ia.br/app/authpass/", "_blank");
-      }
-    });
-  }
-
-  const btnSkipPopup = document.getElementById('btnSkipGooglePopup');
-  if (btnSkipPopup) {
-    btnSkipPopup.addEventListener('click', async () => {
-      await storage.set('authpass_skip_google', 'true');
-      const encVault = await storage.get(VAULT_STORAGE_KEY);
-      if (!encVault) {
-        showScreen('screenOnboarding');
-      } else {
-        showScreen('screenUnlock');
       }
     });
   }
