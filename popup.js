@@ -163,7 +163,7 @@ async function generateTOTP(secretBase32, period = 30, digits = 6) {
 
 // Screen Management Helper (Guarantees only 1 screen is visible)
 function showScreen(screenId) {
-  const screens = ['screenOnboarding', 'screenUnlock', 'screenDashboard'];
+  const screens = ['screenGoogleAuth', 'screenOnboarding', 'screenUnlock', 'screenDashboard'];
   screens.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = (id === screenId) ? 'block' : 'none';
@@ -179,10 +179,15 @@ function showScreen(screenId) {
 // App LifeCycle
 async function initApp() {
   const encVault = await storage.get(VAULT_STORAGE_KEY);
-  if (!encVault) {
+  const skipGoogle = await storage.get('authpass_skip_google');
+  const googleToken = await storage.get('authpass_gdrive_token');
+
+  if (googleToken || encVault) {
+    showScreen('screenUnlock');
+  } else if (skipGoogle === 'true') {
     showScreen('screenOnboarding');
   } else {
-    showScreen('screenUnlock');
+    showScreen('screenGoogleAuth');
   }
 }
 
@@ -375,6 +380,31 @@ async function updateTOTP() {
 // Event Listeners on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
+
+  // Google Connect & Skip
+  const btnGooglePopup = document.getElementById('btnGoogleConnectPopup');
+  if (btnGooglePopup) {
+    btnGooglePopup.addEventListener('click', () => {
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        chrome.tabs.create({ url: "https://4u.ia.br/app/authpass/" });
+      } else {
+        window.open("https://4u.ia.br/app/authpass/", "_blank");
+      }
+    });
+  }
+
+  const btnSkipPopup = document.getElementById('btnSkipGooglePopup');
+  if (btnSkipPopup) {
+    btnSkipPopup.addEventListener('click', async () => {
+      await storage.set('authpass_skip_google', 'true');
+      const encVault = await storage.get(VAULT_STORAGE_KEY);
+      if (!encVault) {
+        showScreen('screenOnboarding');
+      } else {
+        showScreen('screenUnlock');
+      }
+    });
+  }
 
   // Onboard Keypad
   document.querySelectorAll('#onboardKeypad .keypad-btn[data-val]').forEach(btn => {
