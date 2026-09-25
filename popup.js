@@ -198,7 +198,8 @@ async function initApp() {
 
 async function triggerManualSync(silent = false) {
   if (!silent) showToast('Sincronizando com a Nuvem 4U...');
-  const activeEmail = (await storage.get('authpass_active_email')) || 'fbr4g4@gmail.com';
+  const activeEmail = (await storage.get('authpass_active_email')) || '';
+  if (!activeEmail) return;
   let token = await storage.get('authpass_cloud_token');
 
   try {
@@ -323,7 +324,8 @@ async function saveVault() {
   const salt = await storage.get(SALT_STORAGE_KEY);
   const verifier = await storage.get(VERIFIER_STORAGE_KEY);
   const emHash = await storage.get(EM_HASH_STORAGE_KEY);
-  const activeEmail = (await storage.get('authpass_active_email')) || 'fbr4g4@gmail.com';
+  const activeEmail = (await storage.get('authpass_active_email')) || '';
+  if (!activeEmail) return;
   const token = await storage.get('authpass_cloud_token');
 
   const vaultPayload = {
@@ -465,7 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnOpenSettings) {
     btnOpenSettings.addEventListener('click', async () => {
-      const email = (await storage.get('authpass_active_email')) || 'fbr4g4@gmail.com';
+      const email = (await storage.get('authpass_active_email')) || '';
       if (settingsEmailInput) settingsEmailInput.value = email;
       modalSettings?.classList.add('active');
     });
